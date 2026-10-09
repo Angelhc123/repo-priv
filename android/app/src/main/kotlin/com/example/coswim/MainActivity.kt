@@ -10,6 +10,17 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.SpeedRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
+import androidx.health.connect.client.records.SkinTemperatureRecord
+import androidx.health.connect.client.records.PowerRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.StepsCadenceRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterActivity
@@ -45,8 +56,27 @@ class MainActivity : FlutterActivity() {
     // "did permissions work" result on this too meant a user who left
     // Speed unchecked would never get their sessions refreshed at all,
     // even though everything that actually matters was granted fine.
-    private val requestedPermissions = essentialPermissions +
-        HealthPermission.getReadPermission(SpeedRecord::class)
+    // Extra types only used by exportFullDump's diagnostic dump — none of
+    // these gate "permissions granted" for the normal app flow (same
+    // reasoning as SPEED above). Mi Fitness / Redmi Watch 4 probably doesn't
+    // write most of these, but the export should show that explicitly
+    // (status "no_permission") instead of just silently having no data.
+    private val bonusPermissions = setOf(
+        HealthPermission.getReadPermission(SpeedRecord::class),
+        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(Vo2MaxRecord::class),
+        HealthPermission.getReadPermission(SkinTemperatureRecord::class),
+        HealthPermission.getReadPermission(PowerRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getReadPermission(StepsCadenceRecord::class),
+    )
+
+    private val requestedPermissions = essentialPermissions + bonusPermissions
 
     // FlutterActivity extends plain android.app.Activity (not ComponentActivity),
     // so the registerForActivityResult() API isn't available here. The contract
@@ -163,6 +193,35 @@ class MainActivity : FlutterActivity() {
                                         obj.put("heartRate", JSONArray())
                                     }
 
+                                    // SpO2 within session window — unlike the raw dump
+                                    // below, this scopes OxygenSaturationRecord to the
+                                    // exact exercise window so the detail screen can plot
+                                    // it as a real time series, not just a single value.
+                                    try {
+                                        val spo2Resp = client.readRecords(
+                                            ReadRecordsRequest(
+                                                OxygenSaturationRecord::class,
+                                                hrRange
+                                            )
+                                        )
+                                        val spo2Arr = JSONArray()
+                                        for (s in spo2Resp.records) {
+                                            val spo2Obj = JSONObject()
+                                            spo2Obj.put(
+                                                "timeMs",
+                                                s.time.toEpochMilli()
+                                            )
+                                            spo2Obj.put(
+                                                "percentage",
+                                                s.percentage.value
+                                            )
+                                            spo2Arr.put(spo2Obj)
+                                        }
+                                        obj.put("spo2", spo2Arr)
+                                    } catch (_: Exception) {
+                                        obj.put("spo2", JSONArray())
+                                    }
+
                                     // Distance within session window
                                     try {
                                         val distResp = client.readRecords(
@@ -197,7 +256,10 @@ class MainActivity : FlutterActivity() {
                                         obj.put("distanceSegments", JSONArray())
                                     }
 
-                                    // Calories within session window
+                                    // Calories within session window — Mi Fitness writes
+                                    // these as a handful of interval chunks (not a dense
+                                    // per-second series), but it's real data CoSwim was
+                                    // throwing away by only keeping the sum.
                                     try {
                                         val calResp = client.readRecords(
                                             ReadRecordsRequest(
@@ -206,12 +268,43 @@ class MainActivity : FlutterActivity() {
                                             )
                                         )
                                         var totalCal = 0.0
+                                        val calArr = JSONArray()
                                         for (c in calResp.records) {
                                             totalCal += c.energy.inKilocalories
+                                            val cObj = JSONObject()
+                                            cObj.put("startMs", c.startTime.toEpochMilli())
+                                            cObj.put("endMs", c.endTime.toEpochMilli())
+                                            cObj.put("kcal", c.energy.inKilocalories)
+                                            calArr.put(cObj)
                                         }
                                         obj.put("totalCaloriesKcal", totalCal)
+                                        obj.put("calorieIntervals", calArr)
                                     } catch (_: Exception) {
                                         obj.put("totalCaloriesKcal", 0.0)
+                                        obj.put("calorieIntervals", JSONArray())
+                                    }
+
+                                    // Steps within session window — same idea as calories:
+                                    // interval chunks, not a per-stroke count, but still
+                                    // real activity data that wasn't being surfaced before.
+                                    try {
+                                        val stepsResp = client.readRecords(
+                                            ReadRecordsRequest(
+                                                StepsRecord::class,
+                                                hrRange
+                                            )
+                                        )
+                                        val stepsArr = JSONArray()
+                                        for (s in stepsResp.records) {
+                                            val sObj = JSONObject()
+                                            sObj.put("startMs", s.startTime.toEpochMilli())
+                                            sObj.put("endMs", s.endTime.toEpochMilli())
+                                            sObj.put("count", s.count)
+                                            stepsArr.put(sObj)
+                                        }
+                                        obj.put("stepIntervals", stepsArr)
+                                    } catch (_: Exception) {
+                                        obj.put("stepIntervals", JSONArray())
                                     }
 
                                     // Speed samples within session window — HC has no
@@ -541,6 +634,152 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    // Volcado completo de diagnóstico: TODO lo que Health
+                    // Connect pueda ofrecer, por sesión, con cada tipo de
+                    // dato marcado explícitamente como:
+                    //   "ok"           -> se leyó bien (samples puede venir
+                    //                      vacío si el reloj de verdad no
+                    //                      midió nada en esa ventana)
+                    //   "no_permission" -> el permiso no fue concedido
+                    //   "unsupported"   -> este Health Connect/dispositivo
+                    //                      no soporta el tipo
+                    //   "error"        -> cualquier otra falla
+                    // Los totales (p.ej. totalMeters) son null — NO 0 — si
+                    // no hay samples, para no mezclar "no midió nada" con
+                    // "midió cero". No toca getExerciseSessions/getRawHealthPoints
+                    // de arriba: es un camino nuevo e independiente, pensado
+                    // para exportar y mandar a mano, no para la UI normal.
+                    "exportFullDump" -> {
+                        val startMs = call.argument<Long>("startMs") ?: 0L
+                        val endMs = call.argument<Long>("endMs")
+                            ?: System.currentTimeMillis()
+
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val client =
+                                    HealthConnectClient.getOrCreate(this@MainActivity)
+                                val fullRange = TimeRangeFilter.between(
+                                    Instant.ofEpochMilli(startMs),
+                                    Instant.ofEpochMilli(endMs)
+                                )
+
+                                val root = JSONObject()
+                                root.put("generatedAtMs", System.currentTimeMillis())
+                                root.put("rangeStartMs", startMs)
+                                root.put("rangeEndMs", endMs)
+
+                                // Chequeo de permisos de una — más rápido que
+                                // esperar a que cada lectura falle para
+                                // enterarse de que ninguna va a andar.
+                                val grantedPerms = try {
+                                    client.permissionController.getGrantedPermissions()
+                                } catch (_: Exception) {
+                                    emptySet()
+                                }
+                                val permStatus = JSONObject()
+                                val permsByLabel = linkedMapOf(
+                                    "HEART_RATE" to HealthPermission.getReadPermission(HeartRateRecord::class),
+                                    "DISTANCE" to HealthPermission.getReadPermission(DistanceRecord::class),
+                                    "ACTIVE_CALORIES_BURNED" to HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+                                    "BLOOD_OXYGEN" to HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+                                    "EXERCISE" to HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+                                    "SPEED" to HealthPermission.getReadPermission(SpeedRecord::class),
+                                    "TOTAL_CALORIES_BURNED" to HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+                                    "HEART_RATE_VARIABILITY" to HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+                                    "RESPIRATORY_RATE" to HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+                                    "RESTING_HEART_RATE" to HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+                                    "VO2_MAX" to HealthPermission.getReadPermission(Vo2MaxRecord::class),
+                                    "SKIN_TEMPERATURE" to HealthPermission.getReadPermission(SkinTemperatureRecord::class),
+                                    "POWER" to HealthPermission.getReadPermission(PowerRecord::class),
+                                    "ELEVATION_GAINED" to HealthPermission.getReadPermission(ElevationGainedRecord::class),
+                                    "FLOORS_CLIMBED" to HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+                                    "STEPS" to HealthPermission.getReadPermission(StepsRecord::class),
+                                )
+                                for ((label, perm) in permsByLabel) {
+                                    permStatus.put(label, grantedPerms.contains(perm))
+                                }
+                                root.put("permissionsGranted", permStatus)
+
+                                val sessionsReq = ReadRecordsRequest(
+                                    recordType = ExerciseSessionRecord::class,
+                                    timeRangeFilter = fullRange
+                                )
+                                val sessionsResp = client.readRecords(sessionsReq)
+                                val sessionsArr = JSONArray()
+
+                                for (rec in sessionsResp.records) {
+                                    val obj = JSONObject()
+                                    obj.put("id", rec.metadata.id)
+                                    obj.put("startMs", rec.startTime.toEpochMilli())
+                                    obj.put("endMs", rec.endTime.toEpochMilli())
+                                    obj.put("exerciseType", rec.exerciseType)
+                                    obj.put("exerciseTypeName", exerciseTypeNameRaw(rec.exerciseType))
+                                    obj.put("title", rec.title ?: "")
+                                    obj.put("notes", rec.notes ?: "")
+                                    obj.put("sourceApp", rec.metadata.dataOrigin.packageName)
+
+                                    val range = TimeRangeFilter.between(rec.startTime, rec.endTime)
+
+                                    // Laps / Segments — ya confirmados vacíos para
+                                    // Mi Fitness, pero los incluimos igual para que
+                                    // quede documentado en el export, no asumido.
+                                    val lapsArr = JSONArray()
+                                    for (lap in rec.laps) {
+                                        val l = JSONObject()
+                                        l.put("startMs", lap.startTime.toEpochMilli())
+                                        l.put("endMs", lap.endTime.toEpochMilli())
+                                        l.put("lengthMeters", lap.length?.inMeters ?: JSONObject.NULL)
+                                        lapsArr.put(l)
+                                    }
+                                    obj.put("laps", lapsArr)
+
+                                    val segsArr = JSONArray()
+                                    for (seg in rec.segments) {
+                                        val s = JSONObject()
+                                        s.put("startMs", seg.startTime.toEpochMilli())
+                                        s.put("endMs", seg.endTime.toEpochMilli())
+                                        s.put("segmentType", seg.segmentType)
+                                        s.put("repetitions", seg.repetitions)
+                                        segsArr.put(s)
+                                    }
+                                    obj.put("segments", segsArr)
+
+                                    obj.put("heartRate", exportHeartRate(client, range))
+                                    obj.put("speed", exportSpeed(client, range))
+                                    obj.put("spo2", exportSpo2(client, range))
+                                    obj.put("distance", exportDistance(client, range))
+                                    obj.put("activeCalories", exportActiveCalories(client, range))
+                                    obj.put("totalCalories", exportTotalCalories(client, range))
+                                    obj.put("heartRateVariability", exportHrv(client, range))
+                                    obj.put("respiratoryRate", exportRespiratoryRate(client, range))
+                                    obj.put("restingHeartRate", exportRestingHeartRate(client, range))
+                                    obj.put("vo2Max", exportVo2Max(client, range))
+                                    obj.put("skinTemperature", exportSkinTemperature(client, range))
+                                    obj.put("power", exportPower(client, range))
+                                    obj.put("elevationGained", exportElevationGained(client, range))
+                                    obj.put("floorsClimbed", exportFloorsClimbed(client, range))
+                                    obj.put("steps", exportSteps(client, range))
+                                    obj.put("stepsCadence", exportStepsCadence(client, range))
+
+                                    sessionsArr.put(obj)
+                                }
+                                root.put("sessions", sessionsArr)
+
+                                withContext(Dispatchers.Main) {
+                                    result.success(root.toString(2))
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    result.error(
+                                        "HC_EXPORT_ERROR",
+                                        e.message,
+                                        e.stackTraceToString()
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     "hasHealthPermissions" -> {
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
@@ -566,6 +805,336 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // Clasifica por qué falló una lectura, para exportFullDump. Sin esto,
+    // "no tengo permiso" y "el dato no existe" se ven igual (array vacío) y
+    // es imposible distinguirlos mirando el export.
+    private fun classifyReadError(e: Exception): String {
+        if (e is SecurityException) return "no_permission"
+        val msg = (e.message ?: "").lowercase()
+        return if (msg.contains("not supported") || msg.contains("not available") ||
+            msg.contains("unsupported")
+        ) "unsupported" else "error"
+    }
+
+    private suspend fun exportHeartRate(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) for (s in rec.samples) {
+                val p = JSONObject()
+                p.put("timeMs", s.time.toEpochMilli())
+                p.put("bpm", s.beatsPerMinute)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportSpeed(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(SpeedRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) for (s in rec.samples) {
+                val p = JSONObject()
+                p.put("timeMs", s.time.toEpochMilli())
+                p.put("metersPerSecond", s.speed.inMetersPerSecond)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportSpo2(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(OxygenSaturationRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) {
+                val p = JSONObject()
+                p.put("timeMs", rec.time.toEpochMilli())
+                p.put("percentage", rec.percentage.value)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportDistance(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(DistanceRecord::class, range))
+            val arr = JSONArray()
+            var total = 0.0
+            for (rec in resp.records) {
+                total += rec.distance.inMeters
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("meters", rec.distance.inMeters)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalMeters", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalMeters", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportActiveCalories(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, range))
+            val arr = JSONArray()
+            var total = 0.0
+            for (rec in resp.records) {
+                total += rec.energy.inKilocalories
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("kcal", rec.energy.inKilocalories)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalKcal", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalKcal", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportTotalCalories(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, range))
+            val arr = JSONArray()
+            var total = 0.0
+            for (rec in resp.records) {
+                total += rec.energy.inKilocalories
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("kcal", rec.energy.inKilocalories)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalKcal", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalKcal", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportHrv(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) {
+                val p = JSONObject()
+                p.put("timeMs", rec.time.toEpochMilli())
+                p.put("rmssdMillis", rec.heartRateVariabilityMillis)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportRespiratoryRate(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(RespiratoryRateRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) {
+                val p = JSONObject()
+                p.put("timeMs", rec.time.toEpochMilli())
+                p.put("breathsPerMinute", rec.rate)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportRestingHeartRate(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) {
+                val p = JSONObject()
+                p.put("timeMs", rec.time.toEpochMilli())
+                p.put("bpm", rec.beatsPerMinute)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportVo2Max(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(Vo2MaxRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) {
+                val p = JSONObject()
+                p.put("timeMs", rec.time.toEpochMilli())
+                p.put("vo2MlPerMinKg", rec.vo2MillilitersPerMinuteKilogram)
+                p.put("measurementMethod", rec.measurementMethod)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportSkinTemperature(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(SkinTemperatureRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) for (d in rec.deltas) {
+                val p = JSONObject()
+                p.put("timeMs", d.time.toEpochMilli())
+                p.put("deltaCelsius", d.delta.inCelsius)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportPower(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(PowerRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) for (s in rec.samples) {
+                val p = JSONObject()
+                p.put("timeMs", s.time.toEpochMilli())
+                p.put("watts", s.power.inWatts)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportElevationGained(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(ElevationGainedRecord::class, range))
+            val arr = JSONArray()
+            var total = 0.0
+            for (rec in resp.records) {
+                total += rec.elevation.inMeters
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("meters", rec.elevation.inMeters)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalMeters", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalMeters", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportFloorsClimbed(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(FloorsClimbedRecord::class, range))
+            val arr = JSONArray()
+            var total = 0.0
+            for (rec in resp.records) {
+                total += rec.floors
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("floors", rec.floors)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalFloors", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalFloors", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportSteps(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(StepsRecord::class, range))
+            val arr = JSONArray()
+            var total = 0L
+            for (rec in resp.records) {
+                total += rec.count
+                val p = JSONObject()
+                p.put("startMs", rec.startTime.toEpochMilli())
+                p.put("endMs", rec.endTime.toEpochMilli())
+                p.put("count", rec.count)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+            o.put("totalSteps", if (arr.length() > 0) total else JSONObject.NULL)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+            o.put("totalSteps", JSONObject.NULL)
+        }
+        return o
+    }
+
+    private suspend fun exportStepsCadence(client: HealthConnectClient, range: TimeRangeFilter): JSONObject {
+        val o = JSONObject()
+        try {
+            val resp = client.readRecords(ReadRecordsRequest(StepsCadenceRecord::class, range))
+            val arr = JSONArray()
+            for (rec in resp.records) for (s in rec.samples) {
+                val p = JSONObject()
+                p.put("timeMs", s.time.toEpochMilli())
+                p.put("stepsPerMinute", s.rate)
+                arr.put(p)
+            }
+            o.put("status", "ok"); o.put("samples", arr)
+        } catch (e: Exception) {
+            o.put("status", classifyReadError(e)); o.put("samples", JSONObject.NULL)
+        }
+        return o
     }
 
     private fun recordingMethodName(v: Int): String = when (v) {

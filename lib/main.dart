@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/app_state.dart';
 import 'screens/main_navigation.dart';
+import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +37,34 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: MainNavigation(appState: appState),
+      home: AuthGate(appState: appState),
     );
+  }
+}
+
+/// Puerta única al arrancar: muestra LoginScreen o MainNavigation según
+/// appState.isSignedIn, ya resuelto en appState.init() (awaited arriba en
+/// main() antes de runApp). El cambio de pantalla solo ocurre cuando el
+/// usuario inicia/cierra sesión explícitamente — no reacciona a isLoading,
+/// así que no pisa la regla de IndexedStack documentada en main_navigation.dart.
+class AuthGate extends StatefulWidget {
+  final AppState appState;
+
+  const AuthGate({super.key, required this.appState});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.appState.isSignedIn) {
+      return LoginScreen(
+        appState: widget.appState,
+        onSignedIn: () => setState(() {}),
+      );
+    }
+    return MainNavigation(appState: widget.appState);
   }
 }

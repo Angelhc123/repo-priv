@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Para hablar con coswim-backend (Google Sign-In + API). El debug
+         build de Flutter la agrega sola, pero en release hay que declararla
+         a mano o toda llamada http sale como "Permission denied". -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Permissions for Health Connect -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
@@ -6,7 +11,28 @@
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
     <uses-permission android:name="android.permission.health.READ_SLEEP"/>
     <uses-permission android:name="android.permission.health.READ_EXERCISE"/>
-    <uses-permission android:name="android.permission.health.READ_BLOOD_OXYGEN"/>
+    <!-- Era READ_BLOOD_OXYGEN — ese permiso no existe en Health Connect, por
+         eso "Oxígeno en sangre" nunca aparecía como opción activable en los
+         ajustes de la app (confirmado contra androidx.health.connect:
+         connect-client: el permiso real para OxygenSaturationRecord, que es
+         el record que lee MainActivity.kt, es READ_OXYGEN_SATURATION). -->
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
+    <!-- El código ya pedía SPEED como permiso "bonus" pero faltaba declararlo
+         acá — sin esto Health Connect nunca lo iba a poder conceder. -->
+    <uses-permission android:name="android.permission.health.READ_SPEED"/>
+    <!-- Permisos extra solo para el volcado de diagnóstico (exportFullDump en
+         MainActivity.kt) — pedimos todo lo que Health Connect pueda ofrecer
+         relacionado a una sesión de entrenamiento, aunque el reloj no escriba
+         la mayoría. Son "bonus", no bloquean el flujo normal si se deniegan. -->
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED"/>
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY"/>
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX"/>
+    <uses-permission android:name="android.permission.health.READ_SKIN_TEMPERATURE"/>
+    <uses-permission android:name="android.permission.health.READ_POWER"/>
+    <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED"/>
+    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED"/>
 
     <application
         android:label="coswim"

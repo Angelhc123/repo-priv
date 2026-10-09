@@ -5,7 +5,8 @@ import '../models/swim_session.dart';
 import '../models/user_profile.dart';
 
 // Re-export so callers don't need to import swim_session separately
-export '../models/swim_session.dart' show LapData, SegmentData, SpeedPoint;
+export '../models/swim_session.dart'
+    show LapData, SegmentData, SpeedPoint, SpO2Point, CaloriePoint, StepPoint;
 
 class HealthService {
   static final HealthService _instance = HealthService._internal();
@@ -143,6 +144,11 @@ class HealthService {
       }).toList()
         ..sort((a, b) => a.time.compareTo(b.time));
 
+      final spo2Data = _parseSpO2(m['spo2'] as List<dynamic>? ?? []);
+      final speedData = _parseSpeed(m['speed'] as List<dynamic>? ?? []);
+      final calorieData = _parseCalories(m['calorieIntervals'] as List<dynamic>? ?? []);
+      final stepData = _parseSteps(m['stepIntervals'] as List<dynamic>? ?? []);
+
       sessions.add(SwimSession(
         id: m['id'] as String? ?? '${start.millisecondsSinceEpoch}',
         startTime: start,
@@ -152,13 +158,16 @@ class HealthService {
         averageHeartRate: _calculateAverage(hrData),
         maxHeartRate: _calculateMax(hrData),
         heartRateSeries: hrData,
-        spo2: null,
+        spo2: _averageSpO2(spo2Data),
         waterTemperature: null,
-        averageSpeed: null,
+        averageSpeed: _averageSpeed(speedData),
         activityType: _exerciseTypeName(m['exerciseType'] as int? ?? 0),
         laps: _parseLaps(m['laps'] as List<dynamic>? ?? []),
         segments: _parseSegments(m['segments'] as List<dynamic>? ?? []),
-        speedSeries: _parseSpeed(m['speed'] as List<dynamic>? ?? []),
+        speedSeries: speedData,
+        spo2Series: spo2Data,
+        calorieSeries: calorieData,
+        stepSeries: stepData,
       ));
     }
     sessions.sort((a, b) => b.startTime.compareTo(a.startTime));
@@ -182,6 +191,45 @@ class HealthService {
         );
       }).toList()
         ..sort((a, b) => a.time.compareTo(b.time));
+
+  List<SpO2Point> _parseSpO2(List<dynamic> raw) => raw.map((s) {
+        final m = s as Map<String, dynamic>;
+        return SpO2Point(
+          time: DateTime.fromMillisecondsSinceEpoch(m['timeMs'] as int),
+          percentage: (m['percentage'] as num?)?.toDouble() ?? 0.0,
+        );
+      }).toList()
+        ..sort((a, b) => a.time.compareTo(b.time));
+
+  List<CaloriePoint> _parseCalories(List<dynamic> raw) => raw.map((c) {
+        final m = c as Map<String, dynamic>;
+        return CaloriePoint(
+          startTime: DateTime.fromMillisecondsSinceEpoch(m['startMs'] as int),
+          endTime: DateTime.fromMillisecondsSinceEpoch(m['endMs'] as int),
+          kcal: (m['kcal'] as num?)?.toDouble() ?? 0.0,
+        );
+      }).toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+  List<StepPoint> _parseSteps(List<dynamic> raw) => raw.map((s) {
+        final m = s as Map<String, dynamic>;
+        return StepPoint(
+          startTime: DateTime.fromMillisecondsSinceEpoch(m['startMs'] as int),
+          endTime: DateTime.fromMillisecondsSinceEpoch(m['endMs'] as int),
+          count: m['count'] as int? ?? 0,
+        );
+      }).toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+  double? _averageSpO2(List<SpO2Point> pts) {
+    if (pts.isEmpty) return null;
+    return pts.map((e) => e.percentage).reduce((a, b) => a + b) / pts.length;
+  }
+
+  double? _averageSpeed(List<SpeedPoint> pts) {
+    if (pts.isEmpty) return null;
+    return pts.map((e) => e.metersPerSecond).reduce((a, b) => a + b) / pts.length;
+  }
 
   List<SegmentData> _parseSegments(List<dynamic> raw) => raw.map((s) {
         final m = s as Map<String, dynamic>;
@@ -247,6 +295,27 @@ class HealthService {
       );
     }).toList()
       ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  }
+
+  // ── VOLCADO COMPLETO DE DIAGNÓSTICO ─────────────────────────────────────
+
+  /// Pide a Health Connect, vía el canal nativo, absolutamente todo lo que
+  /// pueda dar sobre cada sesión de entrenamiento (HR, velocidad, SpO2,
+  /// distancia, calorías, VO2 max, variabilidad cardíaca, temperatura de
+  /// piel, potencia, pasos, etc). Cada tipo viene marcado "ok"/"no_permission"
+  /// /"unsupported"/"error" — ver exportFullDump en MainActivity.kt — así que
+  /// un `null` siempre significa "no se pudo leer", nunca "midió cero".
+  /// Devuelve el JSON crudo (pretty-printed) listo para guardar en un .txt.
+  Future<String> exportFullDumpJson({Duration days = const Duration(days: 1000)}) async {
+    final now = DateTime.now();
+    final startMs = now.subtract(days).millisecondsSinceEpoch;
+    final endMs = now.add(const Duration(minutes: 15)).millisecondsSinceEpoch;
+
+    final raw = await _channel.invokeMethod<String>(
+      'exportFullDump',
+      {'startMs': startMs, 'endMs': endMs},
+    );
+    return raw ?? '{"error": "El canal nativo no devolvió nada"}';
   }
 
   // ── RAW DATA ────────────────────────────────────────────────────────────

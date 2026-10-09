@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/app_state.dart';
 import '../models/swim_session.dart';
 import '../utils/rules_engine.dart';
+import 'session_detail_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
   final AppState appState;
@@ -77,7 +78,15 @@ class HistoryScreen extends StatelessWidget {
       color: const Color(0xFF0D253F),
       margin: const EdgeInsets.only(bottom: 16.0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SessionDetailScreen(session: session, appState: appState),
+          ),
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,6 +188,7 @@ class HistoryScreen extends StatelessWidget {
               ],
             ),
           ],
+        ),
         ),
       ),
     );

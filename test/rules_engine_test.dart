@@ -1,6 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:coswim/utils/rules_engine.dart';
+import 'package:coswim/models/swim_session.dart';
+
+SwimSession _sessionWithHr(List<(int secondsFromStart, int bpm)> points, {double distance = 2000}) {
+  final start = DateTime(2026, 1, 1, 10, 0, 0);
+  final series = points
+      .map((p) => HeartRatePoint(time: start.add(Duration(seconds: p.$1)), bpm: p.$2))
+      .toList();
+  return SwimSession(
+    id: 'test',
+    startTime: start,
+    endTime: start.add(Duration(seconds: points.last.$1)),
+    distance: distance,
+    calories: 300,
+    heartRateSeries: series,
+  );
+}
 
 void main() {
   group('RulesEngine Tests', () {
@@ -125,6 +141,52 @@ void main() {
 
       final resIntermedSlow = RulesEngine.evaluatePaceVsLevel(160, 'intermediate');
       expect(resIntermedSlow.contains("Un poco lento"), true);
+    });
+
+    test('Distribución de zonas de FC cubre el 100% del tiempo con muestras', () {
+      // 20 años -> FC Máx 200. 60s en zona 1 (110bpm) + 60s en zona 3 (150bpm).
+      final session = _sessionWithHr([(0, 110), (60, 110), (120, 150)]);
+      final zones = RulesEngine.computeHrZoneDistribution(session, age: 20);
+
+      final totalPercentage = zones.fold<double>(0, (a, z) => a + z.percentage);
+      expect(totalPercentage, closeTo(100, 0.01));
+      expect(zones.any((z) => z.zone == 1), true);
+    });
+
+    test('Sin suficientes muestras de FC, no hay zonas ni carga', () {
+      final session = _sessionWithHr([(0, 120)]);
+      expect(RulesEngine.computeHrZoneDistribution(session, age: 20), isEmpty);
+      expect(RulesEngine.computeTrainingLoad([]), null);
+    });
+
+    test('Carga de entrenamiento pondera minutos por número de zona', () {
+      // 10 minutos íntegros en zona 2 (20 años, 130bpm) -> carga = 10 * 2 = 20.
+      final session = _sessionWithHr([(0, 130), (600, 130)]);
+      final zones = RulesEngine.computeHrZoneDistribution(session, age: 20);
+      final load = RulesEngine.computeTrainingLoad(zones);
+      expect(load, closeTo(20, 0.01));
+      expect(RulesEngine.evaluateTrainingLoad(load).title, "Carga suave");
+    });
+
+    test('Recuperación de FC compara el pico con los últimos 2 minutos', () {
+      final session = _sessionWithHr([
+        (0, 120),
+        (60, 170), // pico
+        (550, 170), // justo antes de la ventana final de 2 min (580-700)
+        (700, 130), // único punto dentro de la ventana final
+      ]);
+      final recovery = RulesEngine.computeHrRecovery(session);
+      expect(recovery, isNotNull);
+      expect(recovery!.peakBpm, 170);
+      expect(recovery.finalAvgBpm, 130);
+      expect(recovery.dropBpm, 40);
+    });
+
+    test('Calorías por 100m e intensidad promedio', () {
+      final session = _sessionWithHr([(0, 140), (60, 140)], distance: 1000);
+      expect(RulesEngine.caloriesPer100m(session), closeTo(30, 0.01)); // 300kcal / 10 tramos
+      expect(RulesEngine.averageIntensityPercent(140, 20), closeTo(70, 0.01)); // 140/200
+      expect(RulesEngine.averageIntensityPercent(null, 20), null);
     });
   });
 }

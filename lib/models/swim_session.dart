@@ -32,6 +32,63 @@ class SpeedPoint {
       );
 }
 
+class SpO2Point {
+  final DateTime time;
+  final double percentage;
+
+  SpO2Point({required this.time, required this.percentage});
+
+  Map<String, dynamic> toJson() => {
+        'time': time.toIso8601String(),
+        'percentage': percentage,
+      };
+
+  factory SpO2Point.fromJson(Map<String, dynamic> json) => SpO2Point(
+        time: DateTime.parse(json['time']),
+        percentage: (json['percentage'] as num).toDouble(),
+      );
+}
+
+class CaloriePoint {
+  final DateTime startTime;
+  final DateTime endTime;
+  final double kcal;
+
+  const CaloriePoint({required this.startTime, required this.endTime, required this.kcal});
+
+  Map<String, dynamic> toJson() => {
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'kcal': kcal,
+      };
+
+  factory CaloriePoint.fromJson(Map<String, dynamic> json) => CaloriePoint(
+        startTime: DateTime.parse(json['startTime']),
+        endTime: DateTime.parse(json['endTime']),
+        kcal: (json['kcal'] as num).toDouble(),
+      );
+}
+
+class StepPoint {
+  final DateTime startTime;
+  final DateTime endTime;
+  final int count;
+
+  const StepPoint({required this.startTime, required this.endTime, required this.count});
+
+  Map<String, dynamic> toJson() => {
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'count': count,
+      };
+
+  factory StepPoint.fromJson(Map<String, dynamic> json) => StepPoint(
+        startTime: DateTime.parse(json['startTime']),
+        endTime: DateTime.parse(json['endTime']),
+        count: json['count'] as int,
+      );
+}
+
 class LapData {
   final DateTime startTime;
   final DateTime endTime;
@@ -100,6 +157,9 @@ class SwimSession {
   final List<LapData> laps;
   final List<SegmentData> segments;
   final List<SpeedPoint> speedSeries;
+  final List<SpO2Point> spo2Series;
+  final List<CaloriePoint> calorieSeries;
+  final List<StepPoint> stepSeries;
 
   SwimSession({
     required this.id,
@@ -117,6 +177,9 @@ class SwimSession {
     this.laps = const [],
     this.segments = const [],
     this.speedSeries = const [],
+    this.spo2Series = const [],
+    this.calorieSeries = const [],
+    this.stepSeries = const [],
   });
 
   Duration get duration => endTime.difference(startTime);
@@ -158,6 +221,9 @@ class SwimSession {
         'laps': laps.map((e) => e.toJson()).toList(),
         'segments': segments.map((e) => e.toJson()).toList(),
         'speedSeries': speedSeries.map((e) => e.toJson()).toList(),
+        'spo2Series': spo2Series.map((e) => e.toJson()).toList(),
+        'calorieSeries': calorieSeries.map((e) => e.toJson()).toList(),
+        'stepSeries': stepSeries.map((e) => e.toJson()).toList(),
       };
 
   factory SwimSession.fromJson(Map<String, dynamic> json) => SwimSession(
@@ -183,6 +249,15 @@ class SwimSession {
             .toList(),
         speedSeries: (json['speedSeries'] as List<dynamic>? ?? [])
             .map((e) => SpeedPoint.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        spo2Series: (json['spo2Series'] as List<dynamic>? ?? [])
+            .map((e) => SpO2Point.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        calorieSeries: (json['calorieSeries'] as List<dynamic>? ?? [])
+            .map((e) => CaloriePoint.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        stepSeries: (json['stepSeries'] as List<dynamic>? ?? [])
+            .map((e) => StepPoint.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }

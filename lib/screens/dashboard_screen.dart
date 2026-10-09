@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/app_state.dart';
 import '../models/swim_session.dart';
 
@@ -25,6 +28,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // month) — collapsed by default so opening the screen never has to pay
   // for it, and it's rebuilt from scratch each time it's expanded.
   bool _showRawDump = false;
+  bool _isExportingDump = false;
 
   @override
   void initState() {
@@ -72,6 +76,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _rawPoints = points;
         _isFetchingRaw = false;
       });
+    }
+  }
+
+  /// Pide TODO lo que Health Connect pueda dar (ver exportFullDumpJson) y lo
+  /// manda por el share sheet del sistema como un .txt — así se puede enviar
+  /// sin tener que copiar/pegar texto larguísimo a mano.
+  Future<void> _exportFullDump() async {
+    setState(() => _isExportingDump = true);
+    try {
+      final jsonText = await widget.appState
+          .exportFullDumpJson(days: Duration(days: _selectedDays));
+      final dir = await getTemporaryDirectory();
+      final file = File(
+          '${dir.path}/coswim_export_${DateTime.now().millisecondsSinceEpoch}.txt');
+      await file.writeAsString(jsonText);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Export completo de CoSwim (Health Connect)',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("No se pudo exportar: $e"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingDump = false);
     }
   }
 
@@ -146,6 +180,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ? null
                 : () => _copy(encoder.convert(_rawPoints),
                     "¡Todo el JSON copiado (${_rawPoints.length} objetos)!"),
+          ),
+          IconButton(
+            icon: _isExportingDump
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Color(0xFF64FFDA)),
+                  )
+                : const Icon(Icons.download_for_offline,
+                    color: Color(0xFF64FFDA)),
+            tooltip:
+                "Exportar TXT completo (todo lo que Health Connect pueda dar, "
+                "por sesión)",
+            onPressed: _isExportingDump ? null : _exportFullDump,
           ),
         ],
       ),

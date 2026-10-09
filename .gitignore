@@ -46,3 +46,9 @@ app.*.map.json
 
 # Graphify (knowledge-graph tool, generated output)
 graphify-out/
+
+# Capturas/exports de diagnóstico que se van pasando por chat, no son parte del código
+img/
+
+# Carpeta de pruebas de calidad (labs sueltos, no parte de la app)
+pruebas de calidad/

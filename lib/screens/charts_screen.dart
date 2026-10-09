@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../services/app_state.dart';
 import '../models/swim_session.dart';
 import '../utils/rules_engine.dart';
+import '../utils/splits_calculator.dart';
+import '../widgets/charts/heart_rate_series_chart.dart';
 
 class ChartsScreen extends StatefulWidget {
   final AppState appState;
@@ -71,7 +73,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
                     title: "Frecuencia Cardíaca Continua",
                     subtitle: "Frecuencia cardíaca y zonas de esfuerzo",
                     headerExtension: _buildSessionSelector(sessions),
-                    child: _buildHeartRateSeriesChart(_selectedSession, age),
+                    child: HeartRateSeriesChart(session: _selectedSession, age: age),
                   ),
                   const SizedBox(height: 20),
 
@@ -94,11 +96,29 @@ class _ChartsScreenState extends State<ChartsScreen> {
 
                   // 5. Chart: Speed / Pace per session
                   _buildCard(
-                    title: "Velocidad de Nado por Sesión",
-                    subtitle: "Rendimiento promedio en metros por minuto",
-                    footerNote: "La línea discontinua representa la referencia sugerida para tu nivel.",
-                    child: _buildSpeedChart(sessions, userLevel),
+                    title: "Ritmo Promedio por Sesión",
+                    subtitle: "Distancia total ÷ duración total (incluye pausas entre series)",
+                    footerNote:
+                        "Este reloj no exporta velocidad continua a Health Connect, así que no se puede "
+                        "aislar el ritmo activo de las pausas dentro de una sesión — esta línea es el "
+                        "promedio de toda la sesión. Línea discontinua clara (si aparece): mejor tramo de "
+                        "100m medido con velocidad continua, cuando el reloj sí la provea.",
+                    child: _buildSpeedChart(sessions, userLevel, age),
                   ),
+                  const SizedBox(height: 20),
+
+                  // 6. Chart: Efficiency score trend
+                  _buildCard(
+                    title: "Índice de Eficiencia",
+                    subtitle: "Ritmo relativo a tu nivel, ponderado por esfuerzo cardíaco",
+                    footerNote:
+                        "Métrica propia de CoSwim (no un estándar oficial): 100 = ritmo de referencia de tu nivel a ~75% de tu FC máxima.",
+                    child: _buildEfficiencyChart(sessions, age, userLevel),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 7. Records
+                  _buildRecordsSection(sessions, age, userLevel),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -271,93 +291,6 @@ class _ChartsScreenState extends State<ChartsScreen> {
     );
   }
 
-  // --- 2. Heart Rate Continuous Series Chart with Background Zones ---
-  Widget _buildHeartRateSeriesChart(SwimSession? session, int age) {
-    if (session == null || session.heartRateSeries.isEmpty) {
-      return const Center(child: Text("Sin serie de FC registrada", style: TextStyle(color: Colors.white38)));
-    }
-
-    final series = session.heartRateSeries;
-    final maxHR = RulesEngine.getMaxHeartRate(age).toDouble();
-
-    // Map series to minutes
-    final startTime = session.startTime;
-    List<FlSpot> spots = [];
-    for (final pt in series) {
-      final elapsedMinutes = pt.time.difference(startTime).inSeconds / 60.0;
-      spots.add(FlSpot(elapsedMinutes, pt.bpm.toDouble()));
-    }
-
-    // HR Zones percentages
-    final zone1Min = maxHR * 0.50;
-    final zone2Min = maxHR * 0.60;
-    final zone3Min = maxHR * 0.70;
-    final zone4Min = maxHR * 0.80;
-    final zone5Min = maxHR * 0.90;
-
-    return LineChart(
-      LineChartData(
-        minY: 50,
-        maxY: (maxHR + 10).clamp(150, 230),
-        gridData: const FlGridData(show: false),
-        rangeAnnotations: RangeAnnotations(
-          horizontalRangeAnnotations: [
-            HorizontalRangeAnnotation(y1: zone1Min, y2: zone2Min, color: Colors.green.shade400.withOpacity(0.08)),
-            HorizontalRangeAnnotation(y1: zone2Min, y2: zone3Min, color: Colors.lightGreen.withOpacity(0.08)),
-            HorizontalRangeAnnotation(y1: zone3Min, y2: zone4Min, color: Colors.amber.withOpacity(0.08)),
-            HorizontalRangeAnnotation(y1: zone4Min, y2: zone5Min, color: Colors.orange.withOpacity(0.08)),
-            HorizontalRangeAnnotation(y1: zone5Min, y2: maxHR + 20, color: Colors.red.withOpacity(0.1)),
-          ],
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 22,
-              getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    "${value.toStringAsFixed(1)}m",
-                    style: const TextStyle(color: Colors.white54, fontSize: 9),
-                  ),
-                );
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (value, meta) {
-                if (value.toInt() % 20 == 0) {
-                  return Text(
-                    "${value.toInt()}",
-                    style: const TextStyle(color: Colors.white54, fontSize: 9),
-                  );
-                }
-                return const Text('');
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: Colors.redAccent,
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-          ),
-        ],
-      ),
-    );
-  }
-
   // --- 3. Weekly Calories Chart ---
   Widget _buildWeeklyCaloriesChart(List<SwimSession> sessions) {
     // Simple grouping: since we have mock data over ~12 days, we group into 3 bins:
@@ -507,63 +440,33 @@ class _ChartsScreenState extends State<ChartsScreen> {
   }
 
   // --- 5. Speed / Pace Chart with Reference Level Line ---
-  Widget _buildSpeedChart(List<SwimSession> sessions, String userLevel) {
+  Widget _buildSpeedChart(List<SwimSession> sessions, String userLevel, int age) {
     final chronological = sessions.reversed.toList();
-    List<FlSpot> spots = [];
+    List<FlSpot> avgSpots = [];
+    List<FlSpot> bestSplitSpots = [];
     for (int i = 0; i < chronological.length; i++) {
-      spots.add(FlSpot(i.toDouble(), chronological[i].metersPerMinute));
+      final session = chronological[i];
+      avgSpots.add(FlSpot(i.toDouble(), session.metersPerMinute));
+
+      final splits = computeSplits(session, age: age, level: userLevel);
+      if (splits.isNotEmpty) {
+        final bestPace = splits.map((s) => s.paceSecondsPer100m).reduce((a, b) => a < b ? a : b);
+        bestSplitSpots.add(FlSpot(i.toDouble(), 6000.0 / bestPace));
+      }
     }
 
-    // Determine reference speed in meters per minute (m/min) based on level
-    // Beginner: > 2:30 min/100m -> ~40 m/min
-    // Intermediate: 1:45-2:30 min/100m -> ~40-57 m/min (midpoint = 48)
-    // Advanced: 1:15-1:45 min/100m -> ~57-80 m/min (midpoint = 68)
-    // Competitive: < 1:15 min/100m -> ~80+ m/min (midpoint = 85)
-    double refSpeed = 40.0;
-    String refLabel = "Principiante (40 m/min)";
-    switch (userLevel.toLowerCase()) {
-      case 'beginner':
-        refSpeed = 40.0;
-        refLabel = "Principiante";
-        break;
-      case 'intermediate':
-        refSpeed = 48.0;
-        refLabel = "Intermedio";
-        break;
-      case 'advanced':
-        refSpeed = 68.0;
-        refLabel = "Avanzado";
-        break;
-      case 'competitive':
-        refSpeed = 85.0;
-        refLabel = "Competitivo";
-        break;
-    }
+    final maxAvg = avgSpots.isEmpty
+        ? 50.0
+        : avgSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
 
     return LineChart(
       LineChartData(
-        minY: 10,
-        maxY: 110,
+        minY: 0,
+        maxY: maxAvg * 1.3,
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (val) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
-        ),
-        extraLinesData: ExtraLinesData(
-          horizontalLines: [
-            HorizontalLine(
-              y: refSpeed,
-              color: const Color(0xFF64FFDA).withOpacity(0.6),
-              strokeWidth: 2,
-              dashArray: [5, 5],
-              label: HorizontalLineLabel(
-                show: true,
-                alignment: Alignment.topRight,
-                labelResolver: (line) => "Ref: $refLabel",
-                style: const TextStyle(color: Color(0xFF64FFDA), fontSize: 9, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
         ),
         titlesData: FlTitlesData(
           show: true,
@@ -604,7 +507,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
-            spots: spots,
+            spots: avgSpots,
             isCurved: true,
             color: const Color(0xFF30BCED),
             barWidth: 3,
@@ -615,6 +518,204 @@ class _ChartsScreenState extends State<ChartsScreen> {
               color: const Color(0xFF30BCED).withOpacity(0.05),
             ),
           ),
+          if (bestSplitSpots.isNotEmpty)
+            LineChartBarData(
+              spots: bestSplitSpots,
+              isCurved: true,
+              color: const Color(0xFF64FFDA),
+              barWidth: 2,
+              dashArray: [4, 4],
+              dotData: const FlDotData(show: true),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // --- 6. Efficiency Score Trend Chart ---
+  Widget _buildEfficiencyChart(List<SwimSession> sessions, int age, String userLevel) {
+    final chronological = sessions.reversed.toList();
+    List<FlSpot> spots = [];
+    for (int i = 0; i < chronological.length; i++) {
+      final session = chronological[i];
+      final score = RulesEngine.computeEfficiencyScore(
+        paceSecondsPer100m: session.paceSecondsPer100m,
+        avgHeartRate: session.averageHeartRate,
+        age: age,
+        level: userLevel,
+      );
+      if (score != null) {
+        spots.add(FlSpot(i.toDouble(), score.toDouble()));
+      }
+    }
+
+    if (spots.isEmpty) {
+      return const Center(
+        child: Text("Faltan datos de ritmo o FC para calcular el índice",
+            style: TextStyle(color: Colors.white38)),
+      );
+    }
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (val) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+        ),
+        extraLinesData: ExtraLinesData(
+          horizontalLines: [
+            HorizontalLine(
+              y: 100,
+              color: Colors.white.withOpacity(0.3),
+              strokeWidth: 1,
+              dashArray: [4, 4],
+              label: HorizontalLineLabel(
+                show: true,
+                alignment: Alignment.topRight,
+                labelResolver: (line) => "Referencia (100)",
+                style: const TextStyle(color: Colors.white54, fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index >= 0 && index < chronological.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      DateFormat('dd/MM').format(chronological[index].startTime),
+                      style: const TextStyle(color: Colors.white54, fontSize: 9),
+                    ),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 32,
+              getTitlesWidget: (value, meta) => Text(
+                "${value.toInt()}",
+                style: const TextStyle(color: Colors.white54, fontSize: 9),
+              ),
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.purpleAccent,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: true),
+            belowBarData: BarAreaData(show: true, color: Colors.purpleAccent.withOpacity(0.08)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- 7. Records Section ---
+  Widget _buildRecordsSection(List<SwimSession> sessions, int age, String userLevel) {
+    double? bestPaceSecondsPer100m;
+    double maxDistance = 0;
+    int? bestScore;
+    String trend = "Sin datos suficientes";
+
+    final scoredChronological = <int>[];
+    final chronological = sessions.reversed.toList();
+
+    for (int i = 0; i < chronological.length; i++) {
+      final session = chronological[i];
+      if (session.distance > maxDistance) maxDistance = session.distance;
+
+      for (final split in computeSplits(session, age: age, level: userLevel)) {
+        if (bestPaceSecondsPer100m == null || split.paceSecondsPer100m < bestPaceSecondsPer100m) {
+          bestPaceSecondsPer100m = split.paceSecondsPer100m;
+        }
+      }
+
+      final score = RulesEngine.computeEfficiencyScore(
+        paceSecondsPer100m: session.paceSecondsPer100m,
+        avgHeartRate: session.averageHeartRate,
+        age: age,
+        level: userLevel,
+      );
+      if (score != null) {
+        if (bestScore == null || score > bestScore) bestScore = score;
+        scoredChronological.add(score);
+      }
+    }
+
+    final n = scoredChronological.length;
+    final recentCount = n >= 3 ? 3 : n;
+    final remaining = n - recentCount;
+    final previousCount = remaining >= 3 ? 3 : remaining;
+    if (previousCount >= 2) {
+      final recent = scoredChronological.sublist(n - recentCount);
+      final previous = scoredChronological.sublist(remaining - previousCount, remaining);
+      final recentAvg = recent.reduce((a, b) => a + b) / recent.length;
+      final previousAvg = previous.reduce((a, b) => a + b) / previous.length;
+      final diff = recentAvg - previousAvg;
+      if (diff > 5) {
+        trend = "Mejorando";
+      } else if (diff < -5) {
+        trend = "Empeorando";
+      } else {
+        trend = "Estable";
+      }
+    }
+
+    String paceLabel = "--:--";
+    if (bestPaceSecondsPer100m != null) {
+      final total = bestPaceSecondsPer100m.round();
+      paceLabel = "${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}/100m";
+    }
+
+    return Row(
+      children: [
+        Expanded(child: _buildRecordCard("Mejor 100m", paceLabel, Icons.timer)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildRecordCard("Mayor distancia", "${maxDistance.toInt()} m", Icons.straighten)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildRecordCard("Mejor índice", bestScore?.toString() ?? "--", Icons.emoji_events)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildRecordCard("Tendencia", trend, Icons.trending_up)),
+      ],
+    );
+  }
+
+  Widget _buildRecordCard(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D253F),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF64FFDA), size: 18),
+          const SizedBox(height: 8),
+          Text(value,
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ],
       ),
     );
