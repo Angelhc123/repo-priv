@@ -1,0 +1,13 @@
+{
+  "name": "coswim-docs-word-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Genera los .docx de docs/ a partir de los .md fuente, con el formato institucional UPT (logo, encabezado, pie de página) y diagramas Mermaid renderizados como imagenes.",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node md-to-word.js"
+  },
+  "dependencies": {
+    "docx": "^9.1.1"
+  }
+}

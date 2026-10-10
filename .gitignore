@@ -53,5 +53,7 @@ img/
 # Carpeta de pruebas de calidad (labs sueltos, no parte de la app)
 pruebas de calidad/
 
-# Informes académicos sueltos (Factibilidad, Visión, etc.), no parte del código
-/docs/
+# Generador de los .docx institucionales en docs/tools/: dependencias npm y
+# caché de diagramas Mermaid descargados, no parte del código fuente.
+/docs/tools/node_modules/
+/docs/tools/.cache/
