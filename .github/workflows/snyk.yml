@@ -1,0 +1,49 @@
+name: Snyk Analysis
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Vulnerabilidades en dependencias npm del backend.
+      - name: Snyk test (dependencias del backend)
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        with:
+          args: --file=backend/package.json --sarif-file-output=snyk-deps.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # Análisis estático de código (SAST) — cubre JS/TS del backend; soporte
+      # de Dart en Snyk Code es limitado, para eso está Semgrep aparte.
+      - name: Snyk Code test (SAST)
+        uses: snyk/actions/setup@master
+      - run: snyk code test --sarif-file-output=snyk-code.sarif || true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload resultados a GitHub Code Scanning
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-code.sarif
+
+      - name: Subir reportes como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-reports
+          path: |
+            snyk-deps.sarif
+            snyk-code.sarif
+          if-no-files-found: ignore

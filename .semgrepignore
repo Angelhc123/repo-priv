@@ -1,0 +1,4 @@
+build/
+.dart_tool/
+backend/node_modules/
+android/.gradle/
