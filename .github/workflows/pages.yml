@@ -60,9 +60,10 @@ jobs:
             <h1>CoSwim — Reportes de calidad</h1>
             <p class="meta">Generado automáticamente en cada push a <code>main</code>. Commit: <code>${GITHUB_SHA::7}</code></p>
             <ul>
-              <li><a href="coverage/index.html">Cobertura de tests (Flutter, lcov)</a></li>
+              <li><strong><a href="coverage/index.html">Cobertura de tests (Flutter, lcov) — reporte propio</a></strong></li>
+              <li><a href="https://sonarcloud.io/component_measures?id=angelhc123_coswim&branch=main&metric=coverage&view=list">Cobertura en SonarCloud (Dart + backend)</a> — va directo a la métrica, no al dashboard genérico</li>
               <li><a href="semgrep-report.html">Reporte de Semgrep (análisis estático)</a></li>
-              <li><a href="https://sonarcloud.io/dashboard?id=angelhc123_coswim&branch=main">Dashboard de SonarCloud</a> (hosteado aparte — análisis + cobertura de Dart y del backend)</li>
+              <li><a href="https://sonarcloud.io/dashboard?id=angelhc123_coswim&branch=main">Dashboard de SonarCloud</a> (overview general)</li>
               <li><a href="https://github.com/Angelhc123/repo-priv/security/code-scanning">Code Scanning (Semgrep + Snyk Code, GitHub)</a></li>
               <li><a href="https://github.com/Angelhc123/repo-priv/actions">Historial de workflows</a></li>
             </ul>
