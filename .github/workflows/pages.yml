@@ -62,7 +62,7 @@ jobs:
             <ul>
               <li><a href="coverage/index.html">Cobertura de tests (Flutter, lcov)</a></li>
               <li><a href="semgrep-report.html">Reporte de Semgrep (análisis estático)</a></li>
-              <li><a href="https://sonarcloud.io/dashboard?id=angelhc123_coswim&branch=main">Dashboard de SonarCloud</a> (hosteado aparte, solo backend/ — Dart no es lenguaje soportado)</li>
+              <li><a href="https://sonarcloud.io/dashboard?id=angelhc123_coswim&branch=main">Dashboard de SonarCloud</a> (hosteado aparte — análisis + cobertura de Dart y del backend)</li>
               <li><a href="https://github.com/Angelhc123/repo-priv/security/code-scanning">Code Scanning (Semgrep + Snyk Code, GitHub)</a></li>
               <li><a href="https://github.com/Angelhc123/repo-priv/actions">Historial de workflows</a></li>
             </ul>

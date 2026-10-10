@@ -13,6 +13,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      # Genera coverage/lcov.info ANTES del scan — Sonar solo importa
+      # cobertura, no la calcula (sonar.dart.lcov.reportPaths en
+      # sonar-project.properties).
+      - run: flutter test --coverage
       - uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
