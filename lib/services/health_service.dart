@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:health/health.dart';
 import '../models/swim_session.dart';
@@ -11,9 +12,15 @@ export '../models/swim_session.dart'
 class HealthService {
   static final HealthService _instance = HealthService._internal();
   factory HealthService() => _instance;
-  HealthService._internal();
+  HealthService._internal([Health? health]) : _health = health ?? Health();
 
-  final Health _health = Health();
+  /// Instancia aparte (no el singleton) con un `Health` inyectado — solo
+  /// para tests del fallback que usa el paquete health.
+  @visibleForTesting
+  factory HealthService.forTesting(Health health) =>
+      HealthService._internal(health);
+
+  final Health _health;
 
   // Native Android channel — queries Health Connect ExerciseSession directly,
   // bypassing the health Flutter package which fails silently for WORKOUT.

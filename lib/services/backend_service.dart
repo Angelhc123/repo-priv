@@ -14,12 +14,19 @@ class BackendService {
     defaultValue: 'http://localhost:3000',
   );
 
-  final AuthService _auth = AuthService();
+  final AuthService _auth;
+  final http.Client _client;
+
+  /// [auth] y [client] solo se pasan en tests; por defecto se usan el
+  /// AuthService real y un http.Client nuevo.
+  BackendService({AuthService? auth, http.Client? client})
+      : _auth = auth ?? AuthService(),
+        _client = client ?? http.Client();
 
   /// Canjea el idToken de Google por el JWT propio del backend y lo guarda.
   /// Devuelve el email del usuario autenticado.
   Future<String> signInWithGoogleIdToken(String idToken) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$_baseUrl/auth/google'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'idToken': idToken}),
@@ -45,7 +52,7 @@ class BackendService {
 
   /// Trae el historial de sesiones ya guardado en la base de datos.
   Future<List<SwimSession>> fetchSessions() async {
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$_baseUrl/sessions'),
       headers: await _authHeaders(),
     );
@@ -58,7 +65,7 @@ class BackendService {
   /// Sube (upsert) las sesiones leídas de Health Connect y devuelve el
   /// historial completo ya actualizado desde la base de datos.
   Future<List<SwimSession>> syncSessions(List<SwimSession> sessions) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$_baseUrl/sessions/sync'),
       headers: await _authHeaders(),
       body: jsonEncode({'sessions': sessions.map((s) => s.toJson()).toList()}),

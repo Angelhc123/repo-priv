@@ -6,8 +6,10 @@ import '../utils/rules_engine.dart';
 
 class RealtimeMonitorScreen extends StatefulWidget {
   final AppState appState;
+  /// Solo para tests; por defecto se usa `Health()` del paquete health.
+  final Health? health;
 
-  const RealtimeMonitorScreen({super.key, required this.appState});
+  const RealtimeMonitorScreen({super.key, required this.appState, this.health});
 
   @override
   State<RealtimeMonitorScreen> createState() => _RealtimeMonitorScreenState();
@@ -32,7 +34,7 @@ class _RealtimeMonitorScreenState extends State<RealtimeMonitorScreen> {
   // Evaluation buffer for HR (last 60 seconds)
   final List<int> _hrEvaluationBuffer = [];
 
-  final Health _health = Health();
+  late final Health _health = widget.health ?? Health();
 
   @override
   void initState() {

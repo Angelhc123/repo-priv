@@ -22,5 +22,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "Error interno" });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`coswim-backend escuchando en :${port}`));
+// Solo escucha cuando se ejecuta directo (`node src/server.js`); los tests
+// importan `app` y levantan su propio servidor en un puerto libre.
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => console.log(`coswim-backend escuchando en :${port}`));
+}
+
+module.exports = app;

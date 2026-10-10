@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -7,7 +8,22 @@ import 'package:google_sign_in/google_sign_in.dart';
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
-  AuthService._internal();
+  AuthService._internal({GoogleSignIn? googleSignIn, FlutterSecureStorage? secureStorage})
+      : _googleSignIn = googleSignIn ??
+            GoogleSignIn(
+              scopes: const ['email'],
+              serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
+            ),
+        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  /// Instancia aparte (no el singleton) con dependencias inyectadas — solo
+  /// para tests.
+  @visibleForTesting
+  factory AuthService.forTesting({
+    GoogleSignIn? googleSignIn,
+    FlutterSecureStorage? secureStorage,
+  }) =>
+      AuthService._internal(googleSignIn: googleSignIn, secureStorage: secureStorage);
 
   static const _keyBackendToken = "backend_jwt";
   static const _keyUserEmail = "backend_user_email";
@@ -18,11 +34,8 @@ class AuthService {
   static const String _serverClientId =
       String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: const ['email'],
-    serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
-  );
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final GoogleSignIn _googleSignIn;
+  final FlutterSecureStorage _secureStorage;
 
   String? _cachedToken;
 

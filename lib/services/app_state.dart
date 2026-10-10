@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:health/health.dart';
 import '../models/user_profile.dart';
 import '../models/swim_session.dart';
 import 'storage_service.dart';
@@ -17,11 +16,25 @@ import 'backend_service.dart';
 const bool _kFakeHealth = bool.fromEnvironment('FAKE_HEALTH');
 
 class AppState extends ChangeNotifier {
-  final StorageService _storage = StorageService();
-  final HealthService _health = HealthService();
-  final FakeHealthService _fakeHealth = FakeHealthService(); // FAKE_HEALTH
-  final AuthService _auth = AuthService();
-  final BackendService _backend = BackendService();
+  final StorageService _storage;
+  final HealthService _health;
+  final FakeHealthService _fakeHealth; // FAKE_HEALTH
+  final AuthService _auth;
+  final BackendService _backend;
+
+  /// Los parámetros existen solo para inyectar dobles en los tests; la app
+  /// siempre usa los servicios reales (singletons) por defecto.
+  AppState({
+    StorageService? storage,
+    HealthService? health,
+    FakeHealthService? fakeHealth,
+    AuthService? auth,
+    BackendService? backend,
+  })  : _storage = storage ?? StorageService(),
+        _health = health ?? HealthService(),
+        _fakeHealth = fakeHealth ?? FakeHealthService(),
+        _auth = auth ?? AuthService(),
+        _backend = backend ?? BackendService();
 
   UserProfile _profile = UserProfile.defaultProfile();
   List<SwimSession> _sessions = [];
@@ -162,7 +175,7 @@ class AppState extends ChangeNotifier {
   Future<void> installHealthConnect() async {
     if (_kFakeHealth) return; // FAKE_HEALTH
     try {
-      await Health().installHealthConnect();
+      await _health.installHealthConnect();
     } catch (e) {
       _errorMessage =
           "No se pudo abrir la Play Store para instalar Health Connect: $e";

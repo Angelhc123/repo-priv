@@ -21,6 +21,17 @@ jobs:
       # cobertura, no la calcula (sonar.dart.lcov.reportPaths en
       # sonar-project.properties).
       - run: flutter test --coverage
+      # Cobertura del backend (node:test). Las rutas del lcov salen relativas a
+      # backend/, se les antepone "backend/" para que Sonar las encuentre
+      # desde la raíz del repo.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci && npm run test:coverage
+        working-directory: backend
+      - run: sed -i 's#^SF:#SF:backend/#' backend/coverage/lcov.info
       - uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
