@@ -1,0 +1,85 @@
+name: GitHub Pages (reportes)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+      - run: flutter pub get
+
+      - name: Cobertura de tests (Flutter)
+        run: |
+          flutter test --coverage
+          sudo apt-get update -qq && sudo apt-get install -y -qq lcov
+          mkdir -p site
+          genhtml coverage/lcov.info -o site/coverage --quiet --title "CoSwim — cobertura"
+
+      - name: Reporte HTML de Semgrep
+        continue-on-error: true
+        run: |
+          pip install --break-system-packages --quiet semgrep prospector2html 2>/dev/null \
+            || pip install --quiet semgrep prospector2html
+          semgrep scan --config="p/default" --json --output=semgrep.json --metrics=off
+          prospector-html --input semgrep.json --output site/semgrep-report.html --filter semgrep || true
+
+      - name: Página de inicio
+        run: |
+          mkdir -p site
+          cat > site/index.html <<HTML
+          <!doctype html>
+          <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <title>CoSwim — Reportes de calidad</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; color: #0A192F; }
+              h1 { color: #0A192F; }
+              ul { line-height: 2; }
+              code { background: #eee; padding: 2px 6px; border-radius: 4px; }
+              .meta { color: #666; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <h1>CoSwim — Reportes de calidad</h1>
+            <p class="meta">Generado automáticamente en cada push a <code>main</code>. Commit: <code>${GITHUB_SHA::7}</code></p>
+            <ul>
+              <li><a href="coverage/index.html">Cobertura de tests (Flutter, lcov)</a></li>
+              <li><a href="semgrep-report.html">Reporte de Semgrep (análisis estático)</a></li>
+              <li><a href="https://sonarcloud.io/project/overview?id=angelhc123_coswim">Dashboard de SonarCloud</a> (hosteado aparte, backend/)</li>
+              <li><a href="https://github.com/Angelhc123/repo-priv/security/code-scanning">Code Scanning (Semgrep + Snyk Code, GitHub)</a></li>
+              <li><a href="https://github.com/Angelhc123/repo-priv/actions">Historial de workflows</a></li>
+            </ul>
+          </body>
+          </html>
+          HTML
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
