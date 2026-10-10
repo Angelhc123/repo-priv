@@ -11,10 +11,10 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Semgrep scan
         run: semgrep scan --config="p/default" --sarif --output=semgrep.sarif --metrics=off
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: semgrep-report
           path: semgrep.sarif
@@ -23,11 +23,11 @@ jobs:
     needs: security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: semgrep-report
       - name: Subir resultado a GitHub Code Scanning
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@cf12ceefebab2c867b9c35d7f907e059681d37ab # v3
         with:
           sarif_file: semgrep.sarif

@@ -66,7 +66,14 @@
             android:name="flutterEmbedding"
             android:value="2" />
         
-        <!-- Health Connect rationale activity alias -->
+        <!-- Health Connect rationale activity alias. exported="true" es
+             obligatorio acá: es el contrato que exige el SDK de Health Connect
+             para la pantalla de "por qué pedimos este permiso"
+             (ACTION_SHOW_PERMISSIONS_RATIONALE la lanza el propio sistema,
+             fuera de nuestro proceso), no un descuido. Mitigado con
+             android:permission (solo quien tenga READ_HEALTH_DATA puede
+             invocarla). -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
         <activity-alias
             android:name=".HealthConnectPermissionRationaleActivity"
             android:targetActivity=".MainActivity"

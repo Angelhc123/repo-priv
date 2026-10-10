@@ -9,14 +9,21 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
 
+      # El contenedor de snyk/actions/node monta este working dir — sin
+      # node_modules instalado acá, "snyk test" falla con "Missing
+      # node_modules folder" (pasó en el primer run).
+      - name: Instalar dependencias del backend
+        run: npm ci
+        working-directory: backend
+
       # Vulnerabilidades en dependencias npm del backend.
       - name: Snyk test (dependencias del backend)
-        uses: snyk/actions/node@master
+        uses: snyk/actions/node@11b673cfb4b0dc0d860a1323caa199d54950dcce # master
         continue-on-error: true
         with:
           args: --file=backend/package.json --sarif-file-output=snyk-deps.sarif
@@ -26,7 +33,7 @@ jobs:
       # Análisis estático de código (SAST) — cubre JS/TS del backend; soporte
       # de Dart en Snyk Code es limitado, para eso está Semgrep aparte.
       - name: Snyk Code test (SAST)
-        uses: snyk/actions/setup@master
+        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master
       - run: snyk code test --sarif-file-output=snyk-code.sarif || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -34,13 +41,13 @@ jobs:
       - name: Upload resultados a GitHub Code Scanning
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@cf12ceefebab2c867b9c35d7f907e059681d37ab # v3
         with:
           sarif_file: snyk-code.sarif
 
       - name: Subir reportes como artefacto
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: snyk-reports
           path: |

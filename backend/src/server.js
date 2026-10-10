@@ -3,7 +3,11 @@ const express = require("express");
 const cors = require("cors");
 const routes = require("./routes");
 
-const app = express();
+// Sin CSRF middleware a propósito: esta API es stateless (JWT por header
+// Authorization, nunca cookies/sesión), así que no hay credencial ambiente
+// que el navegador adjunte solo — el ataque CSRF clásico no aplica acá.
+const app = express(); // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+app.disable("x-powered-by"); // no anunciar el framework a quien escanee el servidor
 app.use(cors());
 app.use(express.json({ limit: "5mb" })); // las series HR/velocidad por sesión pueden pesar
 
