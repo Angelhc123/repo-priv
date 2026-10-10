@@ -52,3 +52,6 @@ img/
 
 # Carpeta de pruebas de calidad (labs sueltos, no parte de la app)
 pruebas de calidad/
+
+# Informes académicos sueltos (Factibilidad, Visión, etc.), no parte del código
+/docs/
